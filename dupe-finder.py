@@ -13,8 +13,8 @@ PWDUMP_LINE_RE = re.compile(r'^(.*?:[0-9]{1,}:.*?:.*?:::)\s*$', re.MULTILINE)
 
 def extract_pwdump_lines_from_secretsdump(fp):
     """
-    Извлекает строки формата pwdump из «сырого» вывода secretsdump
-    по заданной регулярке PWDUMP_LINE_RE.
+    Extracts pwdump-formatted lines from raw secretsdump output
+    using the PWDUMP_LINE_RE regex.
     """
     text = fp.read()
     return [m.group(1) for m in PWDUMP_LINE_RE.finditer(text)]
@@ -22,9 +22,9 @@ def extract_pwdump_lines_from_secretsdump(fp):
 
 def parse_pwdump(fp):
     """
-    Читает pwdump-строки:
+    Reads pwdump lines of the form:
       user:RID:LM:NTLM:::
-    и группирует пользователей по NTLM-хэшу.
+    and groups users by NTLM hash.
     """
     by_hash = defaultdict(list)
     for raw in fp:
@@ -47,9 +47,9 @@ def parse_pwdump(fp):
 
 def parse_cracked(fp):
     """
-    Читает словарь вида:
-      NTLM:пароль
-    (например, вывод `hashcat --show`)
+    Reads a dictionary of the form:
+      NTLM:password
+    (e.g., output of `hashcat --show`)
     """
     cracked = {}
     for raw in fp:
@@ -68,21 +68,21 @@ def main():
     ap = argparse.ArgumentParser(
         prog="dupe-finder.py",
         description=(
-            "Найдите пользователей по NTLM-хэшам в выводе secretsdump/pwdump и подставьте известный пароль "
-            "из словаря (формата hashcat: NTLM:пароль).\n\n"
-            "Инструмент принимает либо «сырой» вывод secretsdump.py (автоматически извлекает строки вида "
-            "user:rid:LM:NTLM::: по регулярке), либо уже готовые pwdump-строки."
+            "Find users by NTLM hashes in secretsdump/pwdump output and attach known passwords "
+            "from a dictionary (hashcat format: NTLM:password).\n\n"
+            "The tool accepts either raw secretsdump.py output (it auto-extracts lines like "
+            "user:rid:LM:NTLM::: via regex) or ready-to-use pwdump lines."
         ),
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
-            "Форматы входных данных:\n"
-            "  • SECRETS_DUMP: строки вида user:RID:LM:NTLM::: (secretsdump.py / pwdump)\n"
-            "  • CRACKED:      строки вида NTLM:пароль (hashcat --show)\n\n"
-            "Критерии вывода:\n"
-            "  • Печатаются только те группы, для которых известен пароль (NTLM присутствует в CRACKED).\n"
-            "  • Порядок групп — по убыванию размера (больше совпадений выше).\n"
-            "  • Группы из одного пользователя выводятся, если для их NTLM известен пароль.\n\n"
-            "Быстрый старт (в репозитории лежат тестовые файлы):\n"
+            "Input formats:\n"
+            "  • SECRETS_DUMP: lines like user:RID:LM:NTLM::: (secretsdump.py / pwdump)\n"
+            "  • CRACKED:      lines like NTLM:password (hashcat --show)\n\n"
+            "Output criteria:\n"
+            "  • Prints only groups for which a password is known (NTLM present in CRACKED).\n"
+            "  • Groups are ordered by descending size (more matches first).\n"
+            "  • Single-user groups are printed if their NTLM is cracked.\n\n"
+            "Quick start:\n"
             "  $ python3 dupe-finder.py DC_dump.txt passwords_from_hashcat.txt\n"
             "  $ python3 dupe-finder.py DC_dump.txt passwords_from_hashcat.txt -o result.txt\n"
         ),
@@ -91,17 +91,17 @@ def main():
     ap.add_argument(
         "secretsdump",
         metavar="SECRETS_DUMP",
-        help="Путь к файлу с выводом DC (secretsdump.py) или pwdump-строками. Например: DC_dump.txt",
+        help="Path to the DC dump (secretsdump.py) or pwdump lines. Example: DC_dump.txt",
     )
     ap.add_argument(
         "cracked",
         metavar="CRACKED",
-        help="Путь к словарю вида NTLM:пароль (hashcat --show). Например: passwords_from_hashcat.txt",
+        help="Path to a dictionary of NTLM:password (hashcat --show). Example: passwords_from_hashcat.txt",
     )
     ap.add_argument(
         "-o", "--output",
         metavar="FILE",
-        help="Файл для сохранения результата. Если не указан, печать в stdout.",
+        help="File to save the result. If omitted, prints to stdout.",
     )
 
     args = ap.parse_args()
@@ -129,14 +129,14 @@ def main():
     else:
         writer = lambda s="": print(s)
 
-    # Оставляем только те группы, для которых известен пароль
+    # Keep only groups for which the password is known
     items = [(h, users) for h, users in by_hash.items() if h in cracked]
 
-    # Сортировка: больше пользователей выше, при равенстве — по NTLM
+    # Sort: larger groups first, then by NTLM
     items.sort(key=lambda kv: (-len(kv[1]), kv[0]))
 
     if not items:
-        msg = "Подходящих записей с известными паролями не найдено."
+        msg = "No matching entries with known passwords were found."
         if out_fp:
             writer(msg)
         else:
@@ -148,8 +148,8 @@ def main():
     for h, users in items:
         for u in users:
             writer(u)
-        verb = "имеют" if len(users) != 1 else "имеет"
-        writer(f"{verb} пароль и NTLM - {h}:{cracked[h]}\n")
+        verb = "have" if len(users) != 1 else "has"
+        writer(f"{verb} the password and NTLM - {h}:{cracked[h]}\n")
 
     if out_fp:
         out_fp.close()
